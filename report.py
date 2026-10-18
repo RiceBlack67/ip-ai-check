@@ -122,6 +122,7 @@ body = "".join(f"<section><h2>{E(h)}</h2>{c}</section>" for h, c in sec)
 img = '<img class="card" src="card.png" alt="IP 检测卡片">' if card else ""
 page = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:">
 <title>IP 检测报告 {E(ip_show)}</title><style>
 :root{{--bg:#f7f5f1;--card:#fffdfa;--ink:#2f2a26;--m:#8a8078;--line:#e6e0d8;--ok:#2e7d32;--okb:#e4f1dc;--w:#7a5a00;--wb:#f6ebc9;--b:#8a2a20;--bb:#f6dcd8}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#1a1816;--card:#232020;--ink:#ece7e0;--m:#9a9089;--line:#332e2b;--okb:#24382a;--ok:#8fd19e;--wb:#3b331d;--w:#e8c66a;--bb:#3e2422;--b:#f0a39a}}}}

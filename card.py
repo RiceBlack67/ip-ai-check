@@ -65,7 +65,7 @@ for k, n in [("IP2LOCATION", "IP2Location"), ("SCAMALYTICS", "Scamalytics"), ("i
     v = score.get(k)
     if v not in (None, "null", ""):
         risk.append(f"<span><b>{E(str(v))}</b>{E(n)}</span>")
-risk_html = "".join(risk)
+risk_html = "".join(risk) or f'<span>{E(d.get("xykt_note") or "未启用 xykt 数据源")}</span>'
 
 bl = d.get("dnsbl") or {}
 checked = (bl.get("total") or 0) - len(bl.get("resolver_refused", [])) - len(bl.get("query_failed", []))
@@ -73,7 +73,9 @@ bl_line = f'黑名单 {len(bl.get("blacklisted", []))} / 实查 {checked} 库' i
 
 when = (d.get("generated") or "").replace("T", " ").replace("Z", " UTC")
 
-page = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+page = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{width:1200px;height:630px;background:#FBF6EA;color:#2f2a26;
  font-family:"Noto Sans CJK SC","Noto Sans SC",sans-serif;padding:46px 60px 0;position:relative;overflow:hidden}}
@@ -121,4 +123,6 @@ with tempfile.TemporaryDirectory() as t:
                     "--force-device-scale-factor=2", "--window-size=1200,630",
                     f"--screenshot={os.path.abspath(out)}", "file://" + h],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+if not (os.path.exists(out) and os.path.getsize(out) > 0):
+    sys.exit("截图失败:" + out)
 print(out)

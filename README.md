@@ -51,14 +51,18 @@ ip-ai-check 把这些检测整合到一个工具里，帮你更全面地了解�
 ```bash
 git clone https://github.com/RiceBlack67/ip-ai-check && cd ip-ai-check
 
-./run.sh                     # 检测本机
-./run.sh 203.0.113.10        # 经 SSH 检测远程机器（需能 ssh root@IP 免密登录）
-./run.sh 203.0.113.10 --full # 卡片和报告显示完整 IP（默认只露最后一段，如 *.*.*.56）
-./run.sh --no-xykt           # 不调用 xykt 数据源，几十秒出结果
+./run.sh                          # 检测本机
+./run.sh user@203.0.113.10        # 经 SSH 检测远程机器（先显示要做什么，确认后才执行）
+./run.sh user@203.0.113.10 --dry-run   # 只看将在目标机上做什么，不执行
+./run.sh user@203.0.113.10 -y     # 不再询问确认（脚本、定时任务里用）
+./run.sh myserver --full          # ~/.ssh/config 里的别名也可以；--full 显示完整 IP（默认只露最后一段）
+./run.sh --no-xykt                # 不调用 xykt 数据源，几十秒出结果
 
 # 生成可分享的 HTML 报告页
-PUBLISH_DIR=/var/www/html/ipq PUBLISH_URL=https://example.com/ipq ./run.sh 203.0.113.10 --publish
+PUBLISH_DIR=/var/www/html/ipq PUBLISH_URL=https://example.com/ipq ./run.sh user@203.0.113.10 --publish
 ```
+
+**不需要 root。** 目标机上装好 `jq`、`dig`（dnsutils）、`curl` 后，普通用户就能跑；开 xykt 数据源还要 `bc`、`nc`、`ip`。缺依赖时，只有在 root 或【免密】sudo 下才会自动安装，否则直接告诉你缺什么并退出，不会弹出 sudo 密码。不写用户名时用 ssh 的默认用户，不会自动换成 root。
 
 只想在本机跑检测、不要卡片：`bash ip-ai-check.sh -o result.json`
 
@@ -67,8 +71,8 @@ PUBLISH_DIR=/var/www/html/ipq PUBLISH_URL=https://example.com/ipq ./run.sh 203.0
 | 变量 | 作用 |
 |---|---|
 | `DNSBL_RESOLVER=9.9.9.9` | 查黑名单用指定的 DNS 解析器（默认用系统解析器）；用自建递归解析器（如 unbound）查得最全 |
-| `DNSBL_LIST=zones.txt` | 换成自己的黑名单列表，一行一个库 |
-| `XYKT_SHA256=<sha256>` | 固定 xykt 脚本版本，不符就拒绝运行 |
+| `DNSBL_LIST=zones.txt` | 换成自己的黑名单列表，一行一个库（本机文件，远程检测时内容会带过去） |
+| `XYKT_URL` / `XYKT_SHA256` | 改用别的 xykt 版本（默认已固定到一个提交并校验 sha256） |
 | `OUT_DIR` / `PUBLISH_DIR` / `PUBLISH_URL` | 结果目录 / 报告页发布目录与网址 |
 
 依赖：被检测机器上有 bash、curl、jq、dig（缺了会用 apt 安装）；生成卡片需要 python3 和 chromium。
@@ -81,6 +85,18 @@ PUBLISH_DIR=/var/www/html/ipq PUBLISH_URL=https://example.com/ipq ./run.sh 203.0
 - **文本报告**：快速查看结果。
 - **PNG 卡片**：方便分享和对比。
 - **HTML 报告页**：适合自己部署展示，默认隐藏 IP 前三段。样例：[docs/sample-report.png](docs/sample-report.png)
+
+## 安全
+
+远程检测会在你的服务器上执行命令，所以这部分按「不留隐患」设计：
+
+- **不默认要求 root**：见上面「用法」。用 root 登录时，执行前的预览里会提示你改用普通用户。
+- **执行前先预览**：列出将以哪个用户运行、会访问哪些服务、会不会安装软件包、是否下载第三方脚本，确认后才执行；`--dry-run` 只看不跑；非交互环境不加 `-y` 会直接取消。
+- **不往目标机复制文件**：脚本经 SSH 的标准输入交给目标机的 bash 运行。目标机上只在私有临时目录（权限 0700）里工作，避免了同机其他用户预先放置同名文件、借机替换脚本的风险。
+- **任何方式退出都会清理**：正常结束、出错、Ctrl-C 都会删除临时目录；SSH 中途断开时，目标机上的检测会在几秒内自行停止并清理，不会在后台继续运行。
+- **第三方脚本固定版本**：xykt/IPQuality 按固定提交下载，并校验 sha256，不符就拒绝运行；不会拉取它的最新版。
+- **输入校验**：SSH 目标只接受 主机名 / 用户@主机 / 别名 的格式，以 `-` 开头的会被拒绝，防止被当成 ssh 的选项。
+- **远端数据不可信**：生成卡片和报告页时，目标机返回的所有内容都会转义；页面还带了禁止一切脚本的 CSP，作为第二道防线。
 
 ## 隐私
 
