@@ -39,9 +39,13 @@ tags.append("谷歌未送中" if gz.get("songzhong") == "no" else "谷歌送中"
 
 AI_NAMES = [("chatgpt", "ChatGPT"), ("claude", "Claude"), ("gemini", "Gemini"),
             ("grok", "Grok"), ("perplexity", "Perplexity"), ("copilot", "Copilot")]
+# xykt 的流媒体状态:「失败」是请求没成功(查不了),不是「屏蔽」
+XS = {"解锁": "ok", "屏蔽": "blocked", "中国": "blocked", "失败": "neterr", "待支持": "unknown", "仅自制": "originals"}
 def badge(name, st, sub=""):
-    cls = {"ok": "ok", "full": "ok", "originals": "warn", "captcha": "warn", "unknown": "warn"}.get(st, "bad")
-    sym = {"ok": "✓", "warn": "!", "bad": "✕"}[cls]
+    cls = {"ok": "ok", "full": "ok", "originals": "warn", "captcha": "warn", "unknown": "warn", "neterr": "na"}.get(st, "bad")
+    sym = {"ok": "✓", "warn": "!", "bad": "✕", "na": "?"}[cls]
+    if cls == "na" and not sub:
+        sub = "查询失败"
     return f'<span class="b {cls}"><i>{sym}</i>{E(name)}{f"<em>{E(sub)}</em>" if sub else ""}</span>'
 ai = d.get("ai") or {}
 ai_html = "".join(badge(n, (ai.get(k) or {}).get("status", "neterr"), (ai.get(k) or {}).get("region", ""))
@@ -51,11 +55,12 @@ media = x.get("Media") or {}
 nf = d.get("netflix") or {}
 med = [badge("Netflix", nf.get("status", "neterr"), nf.get("region", ""))]
 yt = gz.get("youtube_region", "")
-med.append(badge("YouTube", "ok" if yt not in ("", "CN", "neterr", "unknown") else "bad", yt))
+yst = {"CN": "blocked", "neterr": "neterr", "unknown": "unknown", "": "neterr"}.get(yt, "ok")
+med.append(badge("YouTube", yst, yt if yst in ("ok", "blocked") else ""))
 for k, n in [("DisneyPlus", "Disney+"), ("TikTok", "TikTok")]:
     m = media.get(k) or {}
     if m:
-        med.append(badge(n, "ok" if m.get("Status") == "解锁" else "bad", m.get("Region", "")))
+        med.append(badge(n, XS.get(m.get("Status"), "unknown"), m.get("Region", "")))
 media_html = "".join(med)
 
 score = x.get("Score") or {}
@@ -96,7 +101,7 @@ body{{width:1200px;height:630px;background:#FBF6EA;color:#2f2a26;
 .b em{{font-style:normal;font-weight:500;color:#8a8078;margin-left:6px;font-size:15px}}
 .ok{{background:#e4f1dc;color:#24572f}} .ok i{{background:#3f8f5a}}
 .warn{{background:#f6ebc9;color:#7a5a00}} .warn i{{background:#c99a1c}}
-.bad{{background:#f6dcd8;color:#8a2a20}} .bad i{{background:#b03a2e}}
+.bad{{background:#f6dcd8;color:#8a2a20}} .bad i{{background:#b03a2e}} .na{{background:#ecebe6;color:#6b675f}} .na i{{background:#9a958c}}
 .risk span{{font-size:17px;color:#6b6158;margin-right:20px}} .risk b{{color:#2e7d32;font-size:20px;margin-right:6px}}
 .bl{{margin-left:auto;font-size:17px;color:#6b6158;white-space:nowrap}}
 .foot{{position:absolute;left:60px;right:60px;bottom:18px;font-size:13px;color:#b0a597;display:flex;justify-content:space-between}}

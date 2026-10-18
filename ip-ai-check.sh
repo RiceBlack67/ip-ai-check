@@ -15,7 +15,7 @@
 # 不需要 root:依赖(jq / dig / curl)齐全时普通用户即可运行;缺依赖时只会用 root 或【免密】sudo 补装。
 # 一键(本机或经 SSH 远程):见 run.sh
 set -u
-VERSION=0.2.0
+VERSION=0.2.1
 # 默认的 xykt/IPQuality 版本:固定提交 + sha256(2026-09-16 版)
 XYKT_COMMIT_DEFAULT=2384a67c756eb35231f5982b34731e522be3653e
 XYKT_SHA256_DEFAULT=b30df5a3c2204276c54e99dcc5080b46f8a627667730aee7de63b109b8ecaecf

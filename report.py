@@ -26,6 +26,8 @@ reg = info.get("Region") or {}
 ST = {"ok": ("ok", "可用"), "full": ("ok", "完整解锁"), "originals": ("warn", "仅自制剧"),
       "captcha": ("warn", "需人机验证"), "unknown": ("warn", "未知"), "blocked": ("bad", "不可用"),
       "neterr": ("warn", "网络错误")}
+# xykt 的流媒体状态:「失败」是请求没成功(查不了),不是「屏蔽」
+XS = {"解锁": "ok", "屏蔽": "blocked", "中国": "blocked", "失败": "neterr", "待支持": "unknown", "仅自制": "originals"}
 def pill(st, text=None):
     c, t = ST.get(st, ("warn", st))
     return f'<span class="p {c}">{E(text or t)}</span>'
@@ -95,7 +97,8 @@ for k, n in [("Youtube", "YouTube"), ("DisneyPlus", "Disney+"), ("TikTok", "TikT
              ("AmazonPrimeVideo", "Prime Video"), ("Reddit", "Reddit")]:
     m = med.get(k)
     if m:
-        rows.append([n, pill("ok" if m.get("Status") == "解锁" else "blocked", m.get("Status")),
+        st = XS.get(m.get("Status"), "unknown")
+        rows.append([n, pill(st, "查询失败(不计入)" if st == "neterr" else m.get("Status")),
                      E(m.get("Region") or "—"), E(m.get("Type") or "")])
 sec.append(("流媒体", table(["服务", "状态", "地区", "说明"], rows)))
 
