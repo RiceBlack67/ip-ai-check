@@ -41,14 +41,18 @@ AI_NAMES = [("chatgpt", "ChatGPT"), ("claude", "Claude"), ("gemini", "Gemini"),
             ("grok", "Grok"), ("perplexity", "Perplexity"), ("copilot", "Copilot")]
 # xykt 的流媒体状态:「失败」是请求没成功(查不了),不是「屏蔽」
 XS = {"解锁": "ok", "屏蔽": "blocked", "中国": "blocked", "失败": "neterr", "待支持": "unknown", "仅自制": "originals"}
-def badge(name, st, sub=""):
+def badge(name, st, sub="", inferred=False):
     cls = {"ok": "ok", "full": "ok", "originals": "warn", "captcha": "warn", "unknown": "warn", "neterr": "na"}.get(st, "bad")
     sym = {"ok": "✓", "warn": "!", "bad": "✕", "na": "?"}[cls]
     if cls == "na" and not sub:
         sub = "查询失败"
-    return f'<span class="b {cls}"><i>{sym}</i>{E(name)}{f"<em>{E(sub)}</em>" if sub else ""}</span>'
+    # 不是实测、只是按地区 / 可达推断的结果用虚线框,和实测结果区分开
+    return f'<span class="b {cls}{" inf" if inferred else ""}"><i>{sym}</i>{E(name)}{f"<em>{E(sub)}</em>" if sub else ""}</span>'
 ai = d.get("ai") or {}
-ai_html = "".join(badge(n, (ai.get(k) or {}).get("status", "neterr"), (ai.get(k) or {}).get("region", ""))
+def inferred(k):
+    det = (ai.get(k) or {}).get("detail", "")
+    return det.startswith("按地区判定") or det.startswith("仅确认可达")
+ai_html = "".join(badge(n, (ai.get(k) or {}).get("status", "neterr"), (ai.get(k) or {}).get("region", ""), inferred(k))
                   for k, n in AI_NAMES)
 
 media = x.get("Media") or {}
@@ -77,6 +81,12 @@ checked = (bl.get("total") or 0) - len(bl.get("resolver_refused", [])) - len(bl.
 bl_line = f'黑名单 {len(bl.get("blacklisted", []))} / 实查 {checked} 库' if bl else ""
 
 when = (d.get("generated") or "").replace("T", " ").replace("Z", " UTC")
+xs = (d.get("tool") or {}).get("xykt")
+if xs is None:  # 0.3.0 以前的结果没有这个字段
+    xs = {"called": bool(x), "ok": bool(x)}
+foot_l = ("ip-ai-check · 已调用 xykt/IPQuality:数据库判定与风险分来自它" if xs.get("called") and xs.get("ok")
+          else "ip-ai-check · 未调用 xykt:没有数据库判定与风险分")
+foot_r = "虚线 = 未实测(按地区或可达推断);AI 可用 = 地区未被拦截"
 
 page = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
@@ -102,6 +112,7 @@ body{{width:1200px;height:630px;background:#FBF6EA;color:#2f2a26;
 .ok{{background:#e4f1dc;color:#24572f}} .ok i{{background:#3f8f5a}}
 .warn{{background:#f6ebc9;color:#7a5a00}} .warn i{{background:#c99a1c}}
 .bad{{background:#f6dcd8;color:#8a2a20}} .bad i{{background:#b03a2e}} .na{{background:#ecebe6;color:#6b675f}} .na i{{background:#9a958c}}
+.b.inf{{background:transparent;border:2px dashed currentColor;padding:3px 10px 3px 6px}}
 .risk span{{font-size:17px;color:#6b6158;margin-right:20px}} .risk b{{color:#2e7d32;font-size:20px;margin-right:6px}}
 .bl{{margin-left:auto;font-size:17px;color:#6b6158;white-space:nowrap}}
 .foot{{position:absolute;left:60px;right:60px;bottom:18px;font-size:13px;color:#b0a597;display:flex;justify-content:space-between}}
@@ -114,7 +125,7 @@ body{{width:1200px;height:630px;background:#FBF6EA;color:#2f2a26;
 <div class="row r1"><span class="h">AI</span>{ai_html}</div>
 <div class="row r2"><span class="h">流媒体</span>{media_html}</div>
 <div class="row r3 risk"><span class="h">风险分</span>{risk_html}<span class="bl">{E(bl_line)}</span></div>
-<div class="foot"><span>ip-ai-check · 数据库判定与风险分来自 xykt/IPQuality</span><span>AI 可用 = 地区未被拦截;Claude/Perplexity 只能按地区判定</span></div>
+<div class="foot"><span>{E(foot_l)}</span><span>{E(foot_r)}</span></div>
 </body></html>"""
 
 with tempfile.TemporaryDirectory() as t:

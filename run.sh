@@ -2,9 +2,10 @@
 # run.sh —— ip-ai-check 一键入口:检测本机,或经 SSH 检测远程机器;输出 JSON / 文本 / 卡片,可选发布 HTML 报告。
 #
 # 用法:
-#   ./run.sh [目标] [选项]
+#   ./run.sh [目标 ...] [选项]
 #     目标          省略 = 检测本机;user@host、host 或 ~/.ssh/config 里的别名 = 经 SSH 检测远程机器
 #                   (不写用户名时用 ssh 的默认用户,不会自动换成 root)
+#                   写两个以上目标 = 逐个检测后用 compare.py 并排对比
 #     -y, --yes     远程检测不再询问确认(非交互环境必须加)
 #     --dry-run     只显示将在目标机上做什么,不执行
 #     --full        卡片和报告显示完整 IP(默认只露最后一段,如 *.*.*.56)
@@ -23,15 +24,35 @@
 # ⚠️ 本工具的结果不要冒充 Report.Check.Place 报告:那种链接是 xykt 脚本上传结果后由 check.place 渲染的。
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-T=""; FULL=""; XY=1; PUB=0; YES=0; DRY=0
+TARGETS=(); FULL=""; XY=1; PUB=0; YES=0; DRY=0
 for a in "$@"; do
   case $a in
     --full) FULL=--full;; --no-xykt) XY=0;; --publish) PUB=1;; -y|--yes) YES=1;; --dry-run) DRY=1;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0;;
     -*) echo "未知选项 $a(看帮助:./run.sh -h)"; exit 2;;
-    *) [ -z "$T" ] || { echo "只能指定一个目标"; exit 2; }; T=$a;;
+    *) TARGETS+=("$a");;
   esac
 done
+
+# 多个目标:逐个调用自己检测,再把成功的结果交给 compare.py
+if [ ${#TARGETS[@]} -gt 1 ]; then
+  OPTS=(); [ -n "$FULL" ] && OPTS+=(--full); [ $XY = 0 ] && OPTS+=(--no-xykt)
+  [ $PUB = 1 ] && OPTS+=(--publish); [ $YES = 1 ] && OPTS+=(-y); [ $DRY = 1 ] && OPTS+=(--dry-run)
+  RES=()
+  for t in "${TARGETS[@]}"; do
+    echo "════ $t ════" >&2
+    rf=$(mktemp)
+    if IPAC_RESULT_FILE=$rf "$0" "$t" "${OPTS[@]}"; then [ -s "$rf" ] && RES+=("$(cat "$rf")")
+    else echo "⚠️ $t 检测没有完成,不参与对比" >&2; fi
+    rm -f "$rf"
+  done
+  [ $DRY = 1 ] && exit 0
+  [ ${#RES[@]} -ge 2 ] || { echo "❌ 成功的结果不足两份,无法对比"; exit 1; }
+  echo "════ 对比 ════"
+  python3 "$HERE/compare.py" "${RES[@]}" $FULL
+  exit 0
+fi
+T=${TARGETS[0]:-}
 # 目标只允许 用户@主机 / 主机 / 别名 的字符,且不能以 - 开头(否则会被 ssh 当成选项)
 if [ -n "$T" ] && { [[ "$T" == -* ]] || ! [[ "$T" =~ ^[A-Za-z0-9._@:%-]+$ ]]; }; then
   echo "目标格式不对:$T"; exit 2
@@ -68,7 +89,7 @@ else
 将在目标机上:
   · 经标准输入运行 ip-ai-check.sh $VER(sha256 前 16 位 $SCRIPT_SHA),不复制任何文件到目标机
   · 只在私有临时目录(0700)里工作,结束、出错、中断、断线都会删除
-  · 访问:AI 服务、Netflix、YouTube、Google、api.ipify.org、DNS 黑名单
+  · 访问:AI 服务(含 api.anthropic.com)、Netflix、YouTube、Google、api.ipify.org、DNS 黑名单
 EOF
   if [ $XY = 1 ]; then
     cat >&2 <<EOF
@@ -104,6 +125,8 @@ mv "$B.json.part" "$B.json"
 
 python3 "$HERE/card.py" "$B.json" "$B.png" $FULL >/dev/null 2>&1 && echo "卡片: $B.png" || echo "(没有 chromium,跳过卡片)"
 echo "JSON: $B.json"
+# 多目标对比模式下,把结果路径交回给上层的 run.sh
+[ -n "${IPAC_RESULT_FILE:-}" ] && echo "$B.json" > "$IPAC_RESULT_FILE"
 if [ $PUB = 1 ]; then
   : "${PUBLISH_DIR:?--publish 需要 PUBLISH_DIR}" "${PUBLISH_URL:?--publish 需要 PUBLISH_URL}"
   ID=$(python3 -c 'import secrets,string;print("".join(secrets.choice(string.ascii_uppercase+string.digits) for _ in range(9)))')

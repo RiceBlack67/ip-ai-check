@@ -120,7 +120,24 @@ if "Port25" in mail:
     bh += f'<p class="line"><b>本机 25 端口出站</b> {"开放" if mail["Port25"] else "阻断"}</p>'
 sec.append(("黑名单与邮件", bh))
 
+# 网络诊断:失败过的请求和原因(0.3.0 起才有)
+diag = d.get("diagnostics") or []
+fd = [z for z in (bl.get("failed_detail") or []) if z.get("kind") == "查询失败"]
+if diag or fd:
+    rows = [[E(z.get("url")), E(z.get("error")), E(z.get("result"))] for z in diag]
+    rows += [[E("黑名单 " + str(z.get("zone"))), E(z.get("reason")), "不计入"] for z in fd]
+    sec.append(("网络诊断", table(["请求", "失败原因", "结果"], rows)))
+
 when = (d.get("generated") or "").replace("T", " ").replace("Z", " UTC")
+xs = (d.get("tool") or {}).get("xykt")
+if xs is None:  # 0.3.0 以前的结果没有这个字段,按有没有 xykt 数据推断
+    xs = {"called": bool(x), "ok": bool(x), "source": ""}
+if xs.get("called") and xs.get("ok"):
+    src_line = f'数据源:本工具实测 + xykt/IPQuality(已调用{"," + xs["source"] if xs.get("source") else ""};被检测 IP 已发给 xykt 的服务器)'
+elif xs.get("called"):
+    src_line = f'数据源:本工具实测(xykt 已尝试调用但没有结果:{d.get("xykt_note") or "未知"})'
+else:
+    src_line = "数据源:仅本工具实测(未调用 xykt,没有数据库类型判定与风险分)"
 body = "".join(f"<section><h2>{E(h)}</h2>{c}</section>" for h, c in sec)
 # 图片地址带内容哈希:同一目录重新生成时,CDN 不会继续给旧卡片
 img = f'<img class="card" src="card.png?v={hashlib.sha256(open(card, "rb").read()).hexdigest()[:10]}" alt="IP 检测卡片">' if card else ""
@@ -140,10 +157,11 @@ h2{{font-size:16px;margin:0 0 10px}}dl{{display:grid;grid-template-columns:7em 1
 .na{{color:var(--m)}}.m{{color:var(--m);font-size:13px;margin-left:8px}}p.m{{margin:6px 0 0}}.line{{margin:8px 0 0}}b.r{{color:var(--b)}}b.y{{color:var(--w)}}
 ul{{margin:8px 0 0;padding-left:18px}}code{{font-size:12.5px;color:var(--m)}}.foot{{color:var(--m);font-size:12.5px;margin-top:20px}}
 </style></head><body><div class="w">
-<h1>IP 检测报告:{E(ip_show)}</h1><p class="sub">{E(when)} · ip-ai-check {E((d.get("tool") or {}).get("version",""))}</p>
+<h1>IP 检测报告:{E(ip_show)}</h1><p class="sub">{E(when)} · ip-ai-check {E((d.get("tool") or {}).get("version",""))}<br>{E(src_line)}</p>
 {img}{body}
-<p class="foot">由 ip-ai-check 生成。各数据库的类型判定、风险评分与风险因子来自 <a href="https://github.com/xykt/IPQuality">xykt/IPQuality</a>(隐私模式运行,不上传);
-Netflix、黑名单、AI 与谷歌送中为本工具实测。AI「可用」= 所在地区未被服务拦截;Claude / Perplexity 网站拒绝脚本访问,只能按地区判定。</p>
+<p class="foot">由 ip-ai-check 生成。各数据库的类型判定、风险评分与风险因子来自 <a href="https://github.com/xykt/IPQuality">xykt/IPQuality</a>(隐私模式运行,不上传报告);
+Netflix、黑名单、AI 与谷歌送中为本工具实测。AI「可用」= 所在地区未被服务拦截,账号层面的风控测不到;
+Claude 网页拒绝脚本访问,改测 Anthropic API 的地区限制;Perplexity 只能确认网站可达。「说明」一栏标了每项是怎么判的。</p>
 </div></body></html>"""
 os.makedirs(outdir, exist_ok=True)
 open(os.path.join(outdir, "index.html"), "w").write(page)
