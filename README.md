@@ -1,14 +1,20 @@
 # ip-ai-check
 
-**一个专门减少误判的 IP 质量检测工具，侧重 AI 服务可用性。**
+**面向 AI 服务的 IP 质量检测工具：检查 AI 服务可用性、地区识别、IP 黑名单与风险信号。**
 
-常见的 IP 检测脚本会给出「看起来很确定、其实是错的」结论：被 DNS 挡掉的黑名单显示成「干净」，早已关停的黑名单库被算进总数，原生 IP 被说成「DNS 解锁」。ip-ai-check 的原则只有一条：
+以前，判断一个 IP 的质量，很多人首先看 Netflix 能否解锁。现在，ChatGPT、Claude、Gemini 等 AI 服务能否正常访问，Google 是否把出口识别为中国区，同样是重要的参考指标。
 
-> **查不了就说查不了，不冒充「正常」；没意义的结果不计入。**
+ip-ai-check 把这些检测整合到一个工具里，帮你更全面地了解一个 IP 的实际表现，而不只是依赖某个数据库给出的单一评分。
 
 ![卡片示例](docs/sample-card.png)
 
-## 它纠正了哪些常见误判
+## 不只检测，还要避免误判
+
+很多 IP 检测工具的问题，不在于没有数据，而在于**把不完整的数据当成确定结论**。本项目的原则是：
+
+> **查不了就说查不了，不冒充「正常」；没意义的结果不计入。**
+
+具体纠正了这些常见误判：
 
 | 常见做法 | 会误判成什么 | ip-ai-check 的做法 |
 |---|---|---|
@@ -17,21 +23,28 @@
 | DNS 查询只要有输出就算「已标记」 | **把超时报错文字当成被标记**，网络一抖就多几条「标记」 | 超时单独计为「查询失败」，失败的会低并发重查一轮 |
 | 把 Spamhaus PBL 当成黑名单 | **家宽 IP 被冤枉**。PBL 收录的是家宽和动态地址，意思是「不应直接发邮件」，不代表有滥用 | 单列为「政策名单」，不算黑名单 |
 | 看 `dig netflix.com` 返回几条地址，≤2 条就判「DNS 解锁」 | **原生 IP 被说成 DNS 解锁**。公共 DNS 对 netflix.com 随机返回 2 条或 3 条，同一个 IP 连跑几次结果会来回变（两个 IP 各采样 12 次：3:9 和 9:3） | 直接请求自制剧和非自制剧的页面，读 Netflix 自己判定的国家，区分 完整解锁 / 仅自制剧 / 不可用 |
-| 只测 ChatGPT，或只看能不能打开 | **AI 到底能不能用说不清**，被谷歌判成中国（送中）也看不出来 | 测 ChatGPT、Claude、Gemini、Grok、Perplexity、Copilot，再加谷歌送中三项检查 |
+| 只测 ChatGPT，或只看能不能打开 | **AI 到底能不能用说不清**，被谷歌判成中国区也看不出来 | 测 ChatGPT、Claude、Gemini、Grok、Perplexity、Copilot，再加谷歌地区识别检查 |
 
-另外，测不到的东西会写明测不到：Claude 和 Perplexity 的网站会拒绝脚本访问，本工具只能按地区判断它们是否被拦截，卡片和报告上都标注了这一点，不把「按地区推断」包装成「实测可用」。
+测不到的也会写明测不到：Claude 和 Perplexity 的网站会拒绝脚本访问，本工具只能按地区判断它们是否被拦截，卡片和报告上都标注了这一点，不把「按地区推断」包装成「实测可用」。
 
-## 检测项目一览
+具体判定方法、测试依据，见下方「判定细节」。
 
-| 项目 | 内容 |
+## 检测项目
+
+| 检测维度 | 检测内容 |
 |---|---|
-| AI 服务 | ChatGPT、Claude、Gemini、Grok、Perplexity、Copilot |
-| 谷歌送中 | YouTube 是否判为中国区（跳转 google.cn）、谷歌搜索是否被重定向到 google.com.hk |
-| Netflix | 完整解锁 / 仅自制剧 / 不可用，以及地区 |
-| IP 黑名单 | 48 个实测可用的库：黑名单 / 政策名单 / 解析器查不了 / 查询失败 |
-| 数据库判定与风险分（可选） | 调用 [xykt/IPQuality](https://github.com/xykt/IPQuality) 获取 IPinfo、ipregistry、ipapi、IP2Location、AbuseIPDB 等的 IP 类型判定、风险评分和风险因子 |
+| AI 服务可用性 | ChatGPT、Claude、Gemini、Grok、Perplexity、Copilot 是否限制当前地区访问 |
+| Google 地区识别 | YouTube 是否判为中国区（跳转 google.cn）、Google 搜索是否被重定向到 google.com.hk |
+| Netflix 解锁状态 | 通过 Netflix 片源页面判断 完整解锁 / 仅自制剧 / 不可用，以及地区 |
+| IP 黑名单 | 48 个经实测筛选的 DNS 黑名单，区分 命中 / 政策名单 / 解析器查不了 / 查询失败 |
+| IP 类型与风险评分（可选） | 调用 [xykt/IPQuality](https://github.com/xykt/IPQuality)，获取 IPinfo、ipregistry、ipapi、IP2Location、AbuseIPDB 等数据源的类型判定、风险评分和风险因子 |
 
-输出：JSON、文本报告、分享卡片（PNG）、可自托管的 HTML 报告页。**不上传任何数据。**
+## 适用场景
+
+- 买了 VPS 或换了出口 IP 后，检查 AI 服务和流媒体能不能用。
+- 对比不同 IP 在地区识别、黑名单和风险评分上的表现。
+- 排查公共 DNS 导致的黑名单检测异常。
+- 生成报告，记录不同出口 IP 的检测结果。
 
 ## 用法
 
@@ -47,10 +60,6 @@ git clone https://github.com/RiceBlack67/ip-ai-check && cd ip-ai-check
 PUBLISH_DIR=/var/www/html/ipq PUBLISH_URL=https://example.com/ipq ./run.sh 203.0.113.10 --publish
 ```
 
-结果在 `reports/`：`*.json`（完整数据）、`*.txt`（文本报告）、`*.png`（卡片）。
-
-HTML 报告页长这样（IP 默认打码）：[docs/sample-report.png](docs/sample-report.png)
-
 只想在本机跑检测、不要卡片：`bash ip-ai-check.sh -o result.json`
 
 可选环境变量：
@@ -64,13 +73,39 @@ HTML 报告页长这样（IP 默认打码）：[docs/sample-report.png](docs/sam
 
 依赖：被检测机器上有 bash、curl、jq、dig（缺了会用 apt 安装）；生成卡片需要 python3 和 chromium。
 
+## 报告格式
+
+结果保存在 `reports/`：
+
+- **JSON**：完整检测数据，便于后续处理。
+- **文本报告**：快速查看结果。
+- **PNG 卡片**：方便分享和对比。
+- **HTML 报告页**：适合自己部署展示，默认隐藏 IP 前三段。样例：[docs/sample-report.png](docs/sample-report.png)
+
+## 隐私
+
+本工具不会把检测结果上传到任何地方，也不生成公开链接；HTML 报告页只会发布到你自己用 `--publish` 指定的目录。
+
+但检测本身需要联网，以下服务都能看到被检测的 IP：
+
+- 本工具自己的检测：各 AI 服务、Netflix、YouTube、Google，查询出口 IP 的 api.ipify.org，以及查黑名单用的 DNS 解析器。
+- 开启 xykt 数据源时（默认开启，`--no-xykt` 关闭）：xykt 的大部分数据库查询经由它自己的服务器 `ipinfo.check.place` 转发，还会访问它的使用量计数器。隐私模式只是不上传报告、不生成链接，**被检测的 IP 仍会发给 xykt 的服务器**。介意的话用 `--no-xykt`。
+
+## 结果如何解读
+
+本工具提供的是多个维度的检测结果，不是对 IP 质量的绝对保证。
+
+AI 网站能访问，不代表账号一定能正常使用；没有命中黑名单，不代表 IP 没有风险；数据库把 IP 标成住宅类型，也不代表目标平台一定会把它当作普通家庭用户。
+
+建议结合检测方法、数据来源和实际使用场景综合判断。
+
 ## 判定细节
 
-- **AI「可用」= 所在地区没有被该服务拦截。** ChatGPT 看官方接口是否返回「不支持的地区」和 iOS 端是否出现 VPN 拦截页；Claude 和 Perplexity 按 Cloudflare 返回的地区对照官方支持地区判断。账号层面的风控检测不到。
+- **AI「可用」= 所在地区没有被该服务拦截。** ChatGPT 看官方接口是否返回「不支持的地区」、iOS 端是否出现 VPN 拦截页；Claude 和 Perplexity 按 Cloudflare 返回的地区对照官方支持地区判断。账号层面的风控检测不到。
 - **Gemini**：页面里出现正常加载的标记即为可用；被谷歌标记「异常流量」时会尝试带 cookie 自动放行，需要人机验证则标为「需验证」。
-- **谷歌送中**：YouTube 判为中国区或谷歌搜索被重定向到 google.com.hk，任一出现即视为送中。
+- **Google 地区识别（送中）**：YouTube 判为中国区或 Google 搜索被重定向到 google.com.hk，任一出现即视为被识别为中国区。
 - **Netflix**：两部非自制剧页面都能打开 = 完整解锁；只有自制剧能打开 = 仅自制剧。
-- **黑名单分类**：返回 `127.0.x.x` 为列入（Spamhaus 的 `127.0.0.10/11` 单列为政策名单）；测试点查不通、或返回 `127.255.255.x` 拒绝码，计为「解析器查不了」；超时计为「查询失败」。后两类都不计入「正常」。
+- **黑名单分类**：返回 `127.0.x.x` 为命中（Spamhaus 的 `127.0.0.10/11` 单列为政策名单）；测试点查不通、或返回 `127.255.255.x` 拒绝码，计为「解析器查不了」；超时计为「查询失败」。后两类都不计入「正常」。
 
 ### 黑名单列表是怎么筛出来的（2026-10 实测）
 
@@ -84,7 +119,7 @@ HTML 报告页长这样（IP 默认打码）：[docs/sample-report.png](docs/sam
 
 ## 致谢
 
-各数据库的类型判定、风险评分和风险因子来自 [@xykt](https://github.com/xykt) 的 [IPQuality](https://github.com/xykt/IPQuality)（AGPL-3.0）。本工具在运行时下载并以隐私模式调用它，不包含、也不修改它的代码。
+IP 类型判定、风险评分和风险因子来自 [@xykt](https://github.com/xykt) 的 [IPQuality](https://github.com/xykt/IPQuality)（AGPL-3.0）。本工具在运行时下载并以隐私模式调用它，不包含、也不修改它的代码。
 
 ## 许可
 
