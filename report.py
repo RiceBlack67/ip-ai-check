@@ -5,7 +5,7 @@
   输出 <目录>/index.html(+ 复制卡片为 card.png)。默认 IP 只露最后一段;--full 显示完整 IP。
   页面自带 noindex:报告是给人看的凭据,不是给搜索引擎的。
 """
-import html, json, os, shutil, sys
+import hashlib, html, json, os, shutil, sys
 
 a = sys.argv[1:]
 if len(a) < 2:
@@ -122,7 +122,8 @@ sec.append(("黑名单与邮件", bh))
 
 when = (d.get("generated") or "").replace("T", " ").replace("Z", " UTC")
 body = "".join(f"<section><h2>{E(h)}</h2>{c}</section>" for h, c in sec)
-img = '<img class="card" src="card.png" alt="IP 检测卡片">' if card else ""
+# 图片地址带内容哈希:同一目录重新生成时,CDN 不会继续给旧卡片
+img = f'<img class="card" src="card.png?v={hashlib.sha256(open(card, "rb").read()).hexdigest()[:10]}" alt="IP 检测卡片">' if card else ""
 page = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:">
